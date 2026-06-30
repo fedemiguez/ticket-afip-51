@@ -1,6 +1,9 @@
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+/** Margen en blanco al final del PDF para el corte de impresoras térmicas. */
+const PDF_BOTTOM_CUT_MARGIN_MM = 5;
+
 function createScaledTicketClone(
   element: HTMLElement,
   sourceWidthMm: number,
@@ -63,7 +66,8 @@ export async function downloadTicketPdf(
   }
 
   const widthMm = targetWidthMm;
-  const heightMm = (canvas.height / canvas.width) * widthMm;
+  const contentHeightMm = (canvas.height / canvas.width) * widthMm;
+  const heightMm = contentHeightMm + PDF_BOTTOM_CUT_MARGIN_MM;
 
   const pdf = new jsPDF({
     orientation: "portrait",
@@ -78,7 +82,7 @@ export async function downloadTicketPdf(
     0,
     0,
     widthMm,
-    heightMm,
+    contentHeightMm,
     undefined,
     "FAST",
   );
@@ -107,14 +111,18 @@ export function openPrintWindow(element: HTMLElement, widthMm: number) {
       box-sizing: border-box;
     }
     .ticket-logo { display:block; max-height:18mm; margin:0 auto 2mm; object-fit:contain; }
-    .ticket-title { text-align:center; font-size:12px; font-weight:700; margin:0; }
-    .ticket-subtitle, .ticket-muted, .ticket-footer { text-align:center; font-size:9px; margin:0; }
+    .ticket-title { text-align:center; font-size:15px; font-weight:700; margin:0; }
+    .ticket-subtitle, .ticket-address, .ticket-phone, .ticket-footer {
+      text-align:center; font-size:12px; font-weight:700; line-height:1.4; margin:0;
+    }
+    .ticket-muted { text-align:center; font-size:9px; margin:0; }
     .ticket-divider { border-top:1px dashed #999; margin:2mm 0; }
     .ticket-row, .ticket-item { display:flex; justify-content:space-between; gap:2mm; margin-bottom:1mm; }
     .ticket-item span { flex:1; }
     .ticket-qr-wrap { margin-top:2mm; text-align:center; }
     .ticket-qr { width:28mm; height:28mm; margin:0 auto; display:block; }
     .ticket-warning { margin-top:2mm; text-align:center; font-size:9px; color:#b45309; }
+    .ticket-cut-spacer { height:8mm; min-height:24px; }
   `;
 
   printWindow.document.write(`

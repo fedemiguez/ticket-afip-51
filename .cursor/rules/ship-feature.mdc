@@ -1,0 +1,12 @@
+---
+description: Ship feature — lee cambios, crea branch, commit, push y PR. Invocar con @ship-feature o escribiendo "ship".
+alwaysApply: false
+---
+
+# Comando ship
+
+Cuando el usuario invoque esta regla (`@ship-feature`) o escriba **ship**, **commit y pr** o **terminé la feature**:
+
+1. Leé y seguí la skill personal **ship-feature** (`~/.cursor/skills/ship-feature/SKILL.md`).
+2. Ejecutá el flujo completo sin pedir confirmaciones intermedias.
+3. Devolvé la URL del PR al finalizar.
