@@ -38,6 +38,6 @@ Abrí [http://localhost:3000](http://localhost:3000).
 
 ## Próximos pasos posibles
 
+- **v2 (en curso):** usuarios, historial y API — ver [`docs/PLAN-V2.md`](docs/PLAN-V2.md) y [`docs/SETUP-V2.md`](docs/SETUP-V2.md).
 - Mejorar parsers para formatos específicos de la app ARCA.
 - Exportar ESC/POS nativo.
-- Guardar plantillas de ticket por comercio.

@@ -2,7 +2,7 @@
 
 Documento de referencia para implementar persistencia, usuarios, historial y API en Vercel.
 
-**Estado:** planificado (no implementado)  
+**Estado:** Fase 0 implementada (infra local). Pendiente: conectar servicios en Vercel y correr migraciones.
 **Stack MVP:** Vercel + Neon Postgres + Clerk + Vercel Blob + Drizzle
 
 ---
