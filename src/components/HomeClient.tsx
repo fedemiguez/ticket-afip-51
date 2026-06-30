@@ -1,26 +1,39 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useState } from "react";
 import { TicketPreview } from "@/components/TicketPreview";
 import { TicketSettings } from "@/components/TicketSettings";
-import {
-  DEFAULT_TICKET_CONFIG,
-  type AfipInvoiceData,
-  type ParsePdfResponse,
-  type TicketConfig,
+import { useTicketConfig } from "@/hooks/useTicketConfig";
+import type {
+  AfipInvoiceData,
+  CreateInvoiceResponse,
+  ParsePdfResponse,
 } from "@/lib/types";
 
 export function HomeClient() {
-  const [config, setConfig] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG);
+  const { isSignedIn, isLoaded } = useAuth();
+  const {
+    config,
+    onConfigChange,
+    loading: configLoading,
+    saving: configSaving,
+    logoUploading,
+    error: configError,
+    showImportPrompt,
+    importLocalConfig,
+    dismissImportPrompt,
+    uploadLogo,
+    deleteLogo,
+    isPersisted,
+  } = useTicketConfig();
+
   const [fileName, setFileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ParsePdfResponse | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [manualQrUrl, setManualQrUrl] = useState("");
-
-  const handleConfigChange = useCallback((next: TicketConfig) => {
-    setConfig(next);
-  }, []);
 
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -28,26 +41,33 @@ export function HomeClient() {
 
     setLoading(true);
     setError(null);
+    setSavedId(null);
     setFileName(file.name);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/parse-pdf", {
+      const useV2 = isLoaded && isSignedIn;
+      const endpoint = useV2 ? "/api/v2/invoices" : "/api/parse-pdf";
+
+      const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
 
-      const data = (await response.json()) as ParsePdfResponse & {
-        error?: string;
-      };
+      const data = (await response.json()) as
+        | (CreateInvoiceResponse & { error?: string })
+        | (ParsePdfResponse & { error?: string });
 
       if (!response.ok) {
         throw new Error(data.error ?? "No se pudo procesar el PDF");
       }
 
       setResult(data);
+      if ("id" in data) {
+        setSavedId(data.id);
+      }
     } catch (uploadError) {
       setResult(null);
       setError(
@@ -124,7 +144,25 @@ export function HomeClient() {
         </div>
       ) : null}
 
-      <TicketSettings config={config} onChange={handleConfigChange} />
+      {configError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {configError}
+        </div>
+      ) : null}
+
+      <TicketSettings
+        config={config}
+        onChange={onConfigChange}
+        isPersisted={isPersisted}
+        loading={configLoading}
+        saving={configSaving}
+        logoUploading={logoUploading}
+        showImportPrompt={showImportPrompt}
+        onImportLocal={importLocalConfig}
+        onDismissImport={dismissImportPrompt}
+        onLogoUpload={uploadLogo}
+        onLogoDelete={deleteLogo}
+      />
 
       {result?.warnings.length ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -139,6 +177,15 @@ export function HomeClient() {
 
       {result ? (
         <>
+          {savedId ? (
+            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+              Comprobante guardado en tu historial.{" "}
+              <a href={`/historial/${savedId}`} className="font-medium underline">
+                Ver y reimprimir
+              </a>
+            </div>
+          ) : null}
+
           <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-zinc-900">
               Datos extraídos del PDF
