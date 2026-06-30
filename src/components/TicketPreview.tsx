@@ -6,6 +6,7 @@ import {
   openPrintWindow,
 } from "@/lib/download-ticket-pdf";
 import type { AfipInvoiceData, TicketConfig } from "@/lib/types";
+import { TICKET_WIDTH_NARROW_MM } from "@/lib/types";
 
 interface TicketPreviewProps {
   invoice: AfipInvoiceData;
@@ -36,24 +37,29 @@ function Row({
 
 export function TicketPreview({ invoice, config, qrDataUrl }: TicketPreviewProps) {
   const ticketRef = useRef<HTMLElement>(null);
-  const [downloading, setDownloading] = useState(false);
+  const [downloadingWidth, setDownloadingWidth] = useState<number | null>(null);
 
   const comprobante =
     invoice.tipoComprobante && invoice.puntoVenta && invoice.numeroComprobante
       ? `Factura ${invoice.tipoComprobante} ${invoice.puntoVenta.padStart(4, "0")}-${invoice.numeroComprobante.padStart(8, "0")}`
       : undefined;
 
-  async function handleDownloadPdf() {
+  const ticketBaseName = `ticket-${invoice.puntoVenta ?? "0000"}-${invoice.numeroComprobante ?? "00000000"}`;
+
+  async function handleDownloadPdf(widthMm: number) {
     if (!ticketRef.current) return;
 
-    setDownloading(true);
+    setDownloadingWidth(widthMm);
     try {
+      const suffix =
+        widthMm === config.paperWidthMm ? "" : `-${widthMm}mm`;
       await downloadTicketPdf(ticketRef.current, {
-        widthMm: config.paperWidthMm,
-        filename: `ticket-${invoice.puntoVenta ?? "0000"}-${invoice.numeroComprobante ?? "00000000"}.pdf`,
+        widthMm,
+        sourceWidthMm: config.paperWidthMm,
+        filename: `${ticketBaseName}${suffix}.pdf`,
       });
     } finally {
-      setDownloading(false);
+      setDownloadingWidth(null);
     }
   }
 
@@ -76,11 +82,23 @@ export function TicketPreview({ invoice, config, qrDataUrl }: TicketPreviewProps
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void handleDownloadPdf()}
-            disabled={downloading}
+            onClick={() => void handleDownloadPdf(config.paperWidthMm)}
+            disabled={downloadingWidth !== null}
             className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60"
           >
-            {downloading ? "Generando..." : `Descargar PDF ${config.paperWidthMm}mm`}
+            {downloadingWidth === config.paperWidthMm
+              ? "Generando..."
+              : `Descargar PDF ${config.paperWidthMm}mm`}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDownloadPdf(TICKET_WIDTH_NARROW_MM)}
+            disabled={downloadingWidth !== null}
+            className="rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-600 disabled:opacity-60"
+          >
+            {downloadingWidth === TICKET_WIDTH_NARROW_MM
+              ? "Generando..."
+              : `Descargar PDF ${TICKET_WIDTH_NARROW_MM}mm`}
           </button>
           <button
             type="button"
@@ -93,10 +111,12 @@ export function TicketPreview({ invoice, config, qrDataUrl }: TicketPreviewProps
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-        <p className="font-medium">El navegador no permite elegir 51mm en el diálogo de impresión</p>
+        <p className="font-medium">El navegador no permite elegir el ancho exacto en el diálogo de impresión</p>
         <p className="mt-1 text-blue-900/90">
-          Usá <strong>Descargar PDF {config.paperWidthMm}mm</strong> y abrí ese archivo con tu
-          impresora térmica. El PDF ya viene con el ancho correcto. En Windows, configurá el
+          Descargá el PDF según tu impresora:{" "}
+          <strong>{config.paperWidthMm}mm</strong> (estándar) o{" "}
+          <strong>{TICKET_WIDTH_NARROW_MM}mm</strong> (rollo angosto). Abrí el archivo con tu
+          impresora térmica; el PDF ya viene con el ancho correcto. En Windows, configurá el
           tamaño personalizado en{" "}
           <strong>Preferencias de impresora → Avanzado → Tamaño de papel</strong>.
         </p>

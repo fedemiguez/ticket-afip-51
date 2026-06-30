@@ -1,21 +1,68 @@
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+function createScaledTicketClone(
+  element: HTMLElement,
+  sourceWidthMm: number,
+  targetWidthMm: number,
+): { captureRoot: HTMLElement; cleanup: () => void } {
+  const scale = targetWidthMm / sourceWidthMm;
+  const clone = element.cloneNode(true) as HTMLElement;
+
+  clone.style.width = `${sourceWidthMm}mm`;
+  clone.style.transform = `scale(${scale})`;
+  clone.style.transformOrigin = "top left";
+  clone.style.boxShadow = "none";
+  clone.style.margin = "0";
+
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = [
+    "position:fixed",
+    "left:-10000px",
+    "top:0",
+    `width:${targetWidthMm}mm`,
+    "overflow:hidden",
+    "background:#fff",
+  ].join(";");
+
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  return {
+    captureRoot: wrapper,
+    cleanup: () => wrapper.remove(),
+  };
+}
+
 export async function downloadTicketPdf(
   element: HTMLElement,
   options: {
     widthMm: number;
     filename: string;
+    sourceWidthMm?: number;
   },
 ) {
-  const canvas = await html2canvas(element, {
-    scale: 3,
-    backgroundColor: "#ffffff",
-    useCORS: true,
-    logging: false,
-  });
+  const targetWidthMm = options.widthMm;
+  const sourceWidthMm = options.sourceWidthMm ?? targetWidthMm;
+  const needsScaling = Math.abs(targetWidthMm - sourceWidthMm) > 0.01;
 
-  const widthMm = options.widthMm;
+  const { captureRoot, cleanup } = needsScaling
+    ? createScaledTicketClone(element, sourceWidthMm, targetWidthMm)
+    : { captureRoot: element, cleanup: () => undefined };
+
+  let canvas;
+  try {
+    canvas = await html2canvas(captureRoot, {
+      scale: 3,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false,
+    });
+  } finally {
+    cleanup();
+  }
+
+  const widthMm = targetWidthMm;
   const heightMm = (canvas.height / canvas.width) * widthMm;
 
   const pdf = new jsPDF({

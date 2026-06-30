@@ -88,6 +88,9 @@ export interface ProfileResponse extends TicketConfig {
   logoUrl: string | null;
 }
 
+export const TICKET_WIDTH_STANDARD_MM = 51;
+export const TICKET_WIDTH_NARROW_MM = 44.5;
+
 export const DEFAULT_TICKET_CONFIG: TicketConfig = {
   businessName: "Mi Comercio",
   subtitle: "",
@@ -95,7 +98,7 @@ export const DEFAULT_TICKET_CONFIG: TicketConfig = {
   phone: "",
   footer: "Gracias por su compra",
   logoDataUrl: null,
-  paperWidthMm: 51,
+  paperWidthMm: TICKET_WIDTH_STANDARD_MM,
 };
 
 export const TICKET_CONFIG_STORAGE_KEY = "ticket-afip-51-config";
