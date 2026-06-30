@@ -140,15 +140,15 @@ export function TicketPreview({ invoice, config, qrDataUrl }: TicketPreviewProps
 
           <h1 className="ticket-title">{config.businessName}</h1>
           {config.subtitle ? <p className="ticket-subtitle">{config.subtitle}</p> : null}
-          {config.address ? <p className="ticket-muted">{config.address}</p> : null}
-          {config.phone ? <p className="ticket-muted">{config.phone}</p> : null}
+          {config.address ? <p className="ticket-address">{config.address}</p> : null}
+          {config.phone ? <p className="ticket-phone">Tel: {config.phone}</p> : null}
 
           <div className="ticket-divider" />
 
           <Row label="Emisor" value={invoice.razonSocial} />
           <Row label="CUIT" value={formatCuit(invoice.cuit)} />
           <Row label="IVA" value={invoice.condicionIva} />
-          <Row label="Comprobante" value={comprobante} />
+          <Row label="Comp." value={comprobante} />
           <Row label="Fecha" value={invoice.fechaEmision} />
 
           <div className="ticket-divider" />
@@ -197,6 +197,7 @@ export function TicketPreview({ invoice, config, qrDataUrl }: TicketPreviewProps
           )}
 
           {config.footer ? <p className="ticket-footer">{config.footer}</p> : null}
+          <div className="ticket-cut-spacer" aria-hidden="true" />
         </article>
       </div>
     </section>
