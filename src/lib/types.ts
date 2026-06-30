@@ -55,6 +55,39 @@ export interface ParsePdfResponse {
   warnings: string[];
 }
 
+export interface CreateInvoiceResponse extends ParsePdfResponse {
+  id: string;
+  processedAt: string;
+}
+
+export interface InvoiceListItem {
+  id: string;
+  sourceFileName: string | null;
+  tipoComprobante: string | null;
+  numeroComprobante: string | null;
+  importeTotal: string | null;
+  fechaEmision: string | null;
+  processedAt: string;
+}
+
+export interface InvoiceListResponse {
+  items: InvoiceListItem[];
+  nextCursor: string | null;
+}
+
+export interface InvoiceDetailResponse {
+  id: string;
+  sourceFileName: string | null;
+  invoice: AfipInvoiceData;
+  qrDataUrl: string | null;
+  warnings: string[];
+  processedAt: string;
+}
+
+export interface ProfileResponse extends TicketConfig {
+  logoUrl: string | null;
+}
+
 export const DEFAULT_TICKET_CONFIG: TicketConfig = {
   businessName: "Mi Comercio",
   subtitle: "",

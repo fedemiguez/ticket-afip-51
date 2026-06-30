@@ -62,11 +62,33 @@ function formatAmount(value: number): string {
 function looksLikePersonName(line: string): boolean {
   if (line.length < 5 || line.length > 80) return false;
   if (/^\d/.test(line)) return false;
-  if (/^(ORIGINAL|DUPLICADO|TRIPLICADO|FACTURA|COD\.|Pág\.|Contado|unidades)/i.test(line)) {
+  if (
+    /^(ORIGINAL|DUPLICADO|TRIPLICADO|FACTURA|COD\.|Pág\.|Contado|unidades|Consumidor Final|Responsable Monotributo|IVA\b)/i.test(
+      line,
+    )
+  ) {
     return false;
   }
   if (/[:$]/.test(line)) return false;
   return /^[A-ZÁÉÍÓÚÑÜ\s.]+$/.test(line);
+}
+
+function isIvaCondition(line: string): boolean {
+  return /^(Responsable Monotributo|IVA Responsable Inscripto|IVA Sujeto Exento|IVA No Alcanzado|Consumidor Final)$/i.test(
+    line,
+  );
+}
+
+/** ARCA suele incluir ORIGINAL + DUPLICADO + TRIPLICADO en un solo PDF. */
+export function getPrimaryInvoiceText(text: string): string {
+  const normalized = text.replace(/\r/g, "\n");
+  const duplicateIndex = normalized.search(/\n(?:DUPLICADO|TRIPLICADO)\n/);
+
+  if (duplicateIndex >= 0) {
+    return normalized.slice(0, duplicateIndex);
+  }
+
+  return normalized;
 }
 
 export function parseFilenameHints(filename?: string) {
@@ -82,6 +104,65 @@ export function parseFilenameHints(filename?: string) {
     tipoComprobante: COD_TO_TIPO[cod],
     puntoVenta: String(Number(match[3])),
     numeroComprobante: String(Number(match[4])),
+  };
+}
+
+function extractReceptor(
+  lines: string[],
+  options: {
+    emisorRazonSocial?: string;
+    emisorIva?: string;
+    receiverCuit?: string;
+  },
+) {
+  const { emisorRazonSocial, emisorIva, receiverCuit } = options;
+
+  const condicionIvaReceptor = lines.find(
+    (line) => line !== emisorIva && isIvaCondition(line),
+  );
+
+  const facturaIndex = lines.findIndex((line) => line === "FACTURA");
+  const productHeaderIndex = lines.findIndex((line) =>
+    /^Código.*Producto/i.test(line),
+  );
+  const searchStart = facturaIndex >= 0 ? facturaIndex : 0;
+  const searchEnd =
+    productHeaderIndex >= 0 ? productHeaderIndex : lines.length;
+  const receptorSection = lines.slice(searchStart, searchEnd);
+
+  const emisorIvaIndex = emisorIva
+    ? receptorSection.findIndex((line) => line === emisorIva)
+    : -1;
+  const afterEmisorIva =
+    emisorIvaIndex >= 0
+      ? receptorSection.slice(emisorIvaIndex + 1)
+      : receptorSection;
+
+  const receptorName = afterEmisorIva.find(looksLikePersonName);
+  const docLine = afterEmisorIva.find((line) => /^Doc\.\s*:/i.test(line));
+  const docValue = docLine?.replace(/^Doc\.\s*:\s*/i, "").trim();
+
+  let receptorRazonSocial = receptorName;
+  if (!receptorRazonSocial && condicionIvaReceptor) {
+    receptorRazonSocial = condicionIvaReceptor;
+  }
+  if (receptorRazonSocial === emisorRazonSocial && condicionIvaReceptor) {
+    receptorRazonSocial = condicionIvaReceptor;
+  }
+
+  const receptorDocumento = docValue ?? receiverCuit;
+  const hasDocument =
+    Boolean(receiverCuit) ||
+    (Boolean(docValue) && docValue !== "-" && docValue !== "0");
+
+  return {
+    receptorRazonSocial,
+    receptorDocumento,
+    condicionIvaReceptor,
+    tipoDocReceptor: hasDocument ? "80" : "99",
+    nroDocReceptor: hasDocument
+      ? (receiverCuit ?? docValue?.replace(/\D/g, "") ?? "0")
+      : "0",
   };
 }
 
@@ -111,8 +192,10 @@ function extractArcaLayout(lines: string[], filename?: string) {
       return year >= 2020 && date !== caeVencimiento;
     }) ?? dates[0];
 
-  const combinedCompIndex = lines.findIndex((line) =>
-    /^\d{13}$/.test(line.replace(/\D/g, "")) && line.replace(/\D/g, "").length === 13,
+  const combinedCompIndex = lines.findIndex(
+    (line) =>
+      /^\d{13}$/.test(line.replace(/\D/g, "")) &&
+      line.replace(/\D/g, "").length === 13,
   );
   const combinedComp =
     combinedCompIndex >= 0
@@ -120,10 +203,6 @@ function extractArcaLayout(lines: string[], filename?: string) {
       : null;
 
   const standaloneCuits = lines.filter(isCuitLine);
-  const cuitFromText =
-    hints.cuit ??
-    standaloneCuits.find((value) => value !== hints.cuit) ??
-    standaloneCuits[0];
 
   const receiverCuit = firstMatch(lines.join("\n"), [
     /CUIT:\s*(\d{11})/i,
@@ -162,29 +241,13 @@ function extractArcaLayout(lines: string[], filename?: string) {
     (originalIndex >= 0 ? lines[originalIndex + 1] : undefined) ??
     razonSocialCandidates[0];
 
-  const cuitLineIndex = standaloneCuits.length
-    ? lines.findIndex((line) => line === emitterCuit)
-    : -1;
-  const receptorRazonSocial =
-    cuitLineIndex >= 0
-      ? lines
-          .slice(cuitLineIndex + 1, cuitLineIndex + 4)
-          .find(looksLikePersonName)
-      : razonSocialCandidates[1];
+  const condicionIvaEmisor = lines.find(isIvaCondition);
 
-  const condicionIvaEmisor = lines.find((line) =>
-    /^(Responsable Monotributo|IVA Responsable Inscripto|IVA Sujeto Exento|IVA No Alcanzado|Consumidor Final)$/i.test(
-      line,
-    ),
-  );
-
-  const condicionIvaReceptor = lines.find(
-    (line) =>
-      line !== condicionIvaEmisor &&
-      /^(Responsable Monotributo|IVA Responsable Inscripto|IVA Sujeto Exento|IVA No Alcanzado|Consumidor Final)$/i.test(
-        line,
-      ),
-  );
+  const receptor = extractReceptor(lines, {
+    emisorRazonSocial: razonSocial,
+    emisorIva: condicionIvaEmisor,
+    receiverCuit,
+  });
 
   const domicilioComercial = lines.find((line) =>
     /^\d{2,5}\s+.+(Córdoba|Buenos Aires|Santa Fe|Cordoba)/i.test(line),
@@ -204,17 +267,17 @@ function extractArcaLayout(lines: string[], filename?: string) {
     condicionIva: condicionIvaEmisor,
     tipoComprobante:
       hints.tipoComprobante ?? tipoFromLetter ?? tipoFromCod,
-    receptorRazonSocial,
-    receptorDocumento: receiverCuit,
-    tipoDocReceptor: receiverCuit ? "80" : "99",
-    nroDocReceptor: receiverCuit ?? "0",
-    condicionIvaReceptor,
+    receptorRazonSocial: receptor.receptorRazonSocial,
+    receptorDocumento: receptor.receptorDocumento,
+    tipoDocReceptor: receptor.tipoDocReceptor,
+    nroDocReceptor: receptor.nroDocReceptor,
+    condicionIvaReceptor: receptor.condicionIvaReceptor,
     codComprobante: hints.codComprobante ?? codComprobante,
   };
 }
 
 export function extractAfipFields(text: string, filename?: string) {
-  const normalized = text.replace(/\r/g, "\n");
+  const normalized = getPrimaryInvoiceText(text).replace(/\r/g, "\n");
   const lines = normalized
     .split("\n")
     .map((line) => line.trim())
@@ -296,12 +359,20 @@ export function extractAfipFields(text: string, filename?: string) {
 }
 
 export function extractItems(text: string): AfipInvoiceItem[] {
-  const lines = text
+  const lines = getPrimaryInvoiceText(text)
     .split(/\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
   const items: AfipInvoiceItem[] = [];
+  const seen = new Set<string>();
+
+  function addItem(item: AfipInvoiceItem) {
+    const key = `${item.description}|${item.quantity ?? ""}|${item.amount ?? ""}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    items.push(item);
+  }
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -313,7 +384,7 @@ export function extractItems(text: string): AfipInvoiceItem[] {
     const amountParts = priceLine.match(/\d+,\d{2}/g) ?? [];
     const subtotal = amountParts[1] ?? amountParts[0];
 
-    items.push({
+    addItem({
       description: productMatch[1].trim(),
       quantity: productMatch[2],
       amount: subtotal,
@@ -329,7 +400,7 @@ export function extractItems(text: string): AfipInvoiceItem[] {
   for (const line of lines) {
     const itemMatch = line.match(/^(.{3,}?)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)$/);
     if (itemMatch) {
-      items.push({
+      addItem({
         description: itemMatch[1].trim(),
         amount: itemMatch[4].trim(),
       });
